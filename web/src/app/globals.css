@@ -730,3 +730,50 @@ footer {
   margin-top: 16px;
   overflow-wrap: anywhere;
 }
+.auth-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.auth-options button {
+  padding: 10px 16px;
+  border: 1px solid #ccd9cd;
+  border-radius: 8px;
+  background: white;
+  color: #20593f;
+  cursor: pointer;
+}
+
+.auth-options button[aria-pressed="true"] {
+  background: #20593f;
+  color: white;
+}
+
+.auth-form {
+  display: grid;
+  gap: 18px;
+  max-width: 460px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccd9cd;
+  border-radius: 8px;
+  background: white;
+  color: #20352b;
+  font: inherit;
+}
+
+.auth-form .button {
+  justify-self: start;
+  border: none;
+  cursor: pointer;
+}
