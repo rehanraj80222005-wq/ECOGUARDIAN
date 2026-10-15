@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import { extractionSchema } from "@/lib/extraction";
 import type { Extraction } from "@/lib/extraction";
+import EmissionCalculation from "@/components/EmissionCalculation";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
@@ -337,7 +338,10 @@ export default function DocumentUpload() {
               </p>
             </div>
           ))}
-
+             <EmissionCalculation
+               key={JSON.stringify(draft)}
+               items={draft.items}
+             />
           <p className="info-note">
             Nothing has been saved to a database or added to emissions totals.
           </p>
