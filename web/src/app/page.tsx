@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Copilot from "@/components/Copilot";
-
+import DocumentUpload from "@/components/DocumentUpload";
 const monthlyEmissions = [
   { month: "Apr", scope1: 12, scope2: 24 },
   { month: "May", scope1: 14, scope2: 26 },
@@ -271,6 +271,7 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+        <DocumentUpload />
         <Copilot />
         <footer>
           EcoGuardian · Pre-audit support, not audit certification.
