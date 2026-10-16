@@ -5,6 +5,7 @@ import Copilot from "@/components/Copilot";
 import DocumentUpload from "@/components/DocumentUpload";
 import AuthPanel from "@/components/AuthPanel";
 import SavedRecords from "@/components/SavedRecords";
+import LiveSummary from "@/components/LiveSummary";
 
 const monthlyEmissions = [
   { month: "Apr", scope1: 12, scope2: 24 },
@@ -92,37 +93,13 @@ export default function Dashboard() {
         </section>
 
         <div className="demo-notice">
-          Demo workspace · Figures are illustrative and are not calculated
-          from the sample documents below.
-        </div>
+  Top cards show all-time totals from your saved demo records.
+  The monthly chart, review queue, document table, and scenario planner
+  below are illustrative examples. All calculated emissions currently
+  use a fictional factor.
+</div>
 
-        <section className="stats" aria-label="September emissions summary">
-          <article className="card">
-            <p className="muted">September emissions</p>
-            <h2>{total.toFixed(1)} <small>tCO₂e</small></h2>
-            <p className="warning">
-              +{change.toFixed(1)}% compared with August
-            </p>
-          </article>
-
-          <article className="card">
-            <p className="muted">Scope 1</p>
-            <h2>{latest.scope1.toFixed(1)} <small>tCO₂e</small></h2>
-            <p className="muted">Direct emissions from operations</p>
-          </article>
-
-          <article className="card">
-            <p className="muted">Scope 2</p>
-            <h2>{latest.scope2.toFixed(1)} <small>tCO₂e</small></h2>
-            <p className="muted">Purchased energy emissions</p>
-          </article>
-
-          <article className="card">
-            <p className="muted">Documents requiring attention</p>
-            <h2>2 <small>of 3</small></h2>
-            <p className="muted">One review and one anomaly</p>
-          </article>
-        </section>
+        <LiveSummary />
 
         <div className="content-grid">
           <section className="card">
@@ -131,7 +108,7 @@ export default function Dashboard() {
                 <h2>Emissions over time</h2>
                 <p className="muted">Monthly sample totals · tCO₂e</p>
               </div>
-              <span className="badge">Apr – Sep</span>
+              <span className="badge">Demo workspace</span>
             </div>
 
             <div className="legend">
