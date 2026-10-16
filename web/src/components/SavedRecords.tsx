@@ -15,6 +15,7 @@ const recordsSchema = z.object({
       unit: z.string(),
       tonnes_co2e: z.number().finite().nonnegative(),
       is_demo: z.boolean(),
+      source_document_id: z.string().uuid().nullable(),
     })
   ),
 });
@@ -45,7 +46,9 @@ export default function SavedRecords() {
       <h2>Saved records</h2>
 
       {authError ? (
-        <p className="copilot-error" role="alert">{authError}</p>
+        <p className="copilot-error" role="alert">
+          {authError}
+        </p>
       ) : userId ? (
         <RecordList key={userId} />
       ) : (
@@ -87,30 +90,46 @@ function RecordList() {
         });
 
         const text = await response.text();
-        let data;
+        let data: unknown;
 
         try {
           data = JSON.parse(text);
         } catch {
-          throw new Error(`Unexpected response (HTTP ${response.status}).`);
+          throw new Error(
+            `Unexpected response (HTTP ${response.status}).`
+          );
         }
 
         if (!response.ok) {
-          throw new Error(data?.error || "Could not load records.");
+          const message =
+            typeof data === "object" &&
+            data !== null &&
+            "error" in data &&
+            typeof data.error === "string"
+              ? data.error
+              : "Could not load records.";
+
+          throw new Error(message);
         }
 
         const parsed = recordsSchema.safeParse(data);
 
         if (!parsed.success) {
-          throw new Error("The records response has an unexpected format.");
+          throw new Error(
+            "The records response has an unexpected format."
+          );
         }
 
-        if (active) setRecords(parsed.data.records);
+        if (active) {
+          setRecords(parsed.data.records);
+        }
       } catch (error: unknown) {
         if (active) {
           setRecords([]);
           setError(
-            error instanceof Error ? error.message : "Could not load records."
+            error instanceof Error
+              ? error.message
+              : "Could not load records."
           );
         }
       } finally {
@@ -142,42 +161,92 @@ function RecordList() {
         {loading ? "Loading…" : "Refresh records"}
       </button>
 
-      {error && <p className="copilot-error" role="alert">{error}</p>}
+      {error && (
+        <p className="copilot-error" role="alert">
+          {error}
+        </p>
+      )}
 
       {!loading && !error && records.length === 0 && (
         <p className="info-note">You have no saved records yet.</p>
       )}
 
       {!loading && !error && records.length > 0 && (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Supplier</th>
-                <th>Billing period</th>
-                <th>Consumption</th>
-                <th>Demo emissions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((record) => (
-                <tr key={record.id}>
-                  <td>{record.supplier || "Not provided"}</td>
-                  <td>{record.billing_period || "Not provided"}</td>
-                  <td>
-                    {record.quantity.toLocaleString()} {record.unit}
-                  </td>
-                  <td>
-                    {record.tonnes_co2e.toLocaleString(undefined, {
-                      maximumFractionDigits: 6,
-                    })}{" "}
-                    tCO₂e
-                  </td>
+        <>
+          <div className="table-scroll" style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Supplier</th>
+                  <th scope="col">Billing period</th>
+                  <th scope="col">Consumption</th>
+                  <th scope="col">Demo emissions</th>
+                  <th scope="col">Source reference</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody>
+                {records.map((record) => (
+                  <tr key={record.id}>
+                    <td>{record.supplier || "Not provided"}</td>
+
+                    <td>{record.billing_period || "Not provided"}</td>
+
+                    <td>
+                      {record.quantity.toLocaleString()} {record.unit}
+                    </td>
+
+                    <td>
+                      {record.tonnes_co2e.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}{" "}
+                      tCO₂e
+                    </td>
+
+                    <td style={{ minWidth: 180 }}>
+                      {record.source_document_id ? (
+                        <>
+                          <strong>Linked source</strong>
+                          <code
+                            style={{
+                              display: "block",
+                              marginTop: 6,
+                              maxWidth: 260,
+                              overflowWrap: "anywhere",
+                              whiteSpace: "normal",
+                              fontSize: 12,
+                            }}
+                          >
+                            {record.source_document_id}
+                          </code>
+                        </>
+                      ) : (
+                        <>
+                          <strong>Legacy record</strong>
+                          <span
+                            className="muted"
+                            style={{
+                              display: "block",
+                              marginTop: 6,
+                            }}
+                          >
+                            No source linked
+                          </span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="info-note">
+            Linked source IDs identify registered file fingerprints.
+            They do not verify the accuracy of the bill or its entered
+            quantities. Original files are not stored.
+          </p>
+        </>
       )}
     </>
   );
