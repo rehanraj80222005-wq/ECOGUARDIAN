@@ -7,8 +7,8 @@ import { extractionSchema } from "@/lib/extraction";
 
 const saveSchema = z.object({
   reviewed: z.literal(true),
+  sourceDocumentId: z.string().uuid(),
   draft: extractionSchema,
-  ids: z.array(z.string().uuid()).min(1).max(30),
 });
 
 function reply(body: object, status = 200) {
@@ -26,7 +26,7 @@ export async function GET() {
     const { data, error } = await auth.supabase
       .from("emission_records")
       .select(
-        "id,created_at,supplier,billing_period,quantity,unit,tonnes_co2e,is_demo"
+        "id,created_at,supplier,billing_period,quantity,unit,tonnes_co2e,is_demo,source_document_id"
       )
       .eq("user_id", auth.user.id)
       .order("created_at", { ascending: false })
@@ -59,19 +59,18 @@ export async function POST(request: Request) {
 
   if (!parsed.success) {
     return reply(
-      { error: "Review the draft and confirm it before saving." },
+      {
+        error:
+          "Register a source file and confirm the reviewed draft before saving.",
+      },
       400
     );
   }
 
-  const { draft, ids } = parsed.data;
+  const { draft, sourceDocumentId } = parsed.data;
 
-  if (
-    draft.items.length === 0 ||
-    draft.items.length !== ids.length ||
-    new Set(ids).size !== ids.length
-  ) {
-    return reply({ error: "The record identifiers are invalid." }, 400);
+  if (draft.items.length === 0) {
+    return reply({ error: "Add at least one activity." }, 400);
   }
 
   for (const [index, item] of draft.items.entries()) {
@@ -84,7 +83,7 @@ export async function POST(request: Request) {
       return reply(
         {
           error:
-            `Activity ${index + 1}: saving currently requires electricity, ` +
+            `Activity ${index + 1}: provide electricity consumption, ` +
             "a valid quantity, and kWh units.",
         },
         400
@@ -92,53 +91,57 @@ export async function POST(request: Request) {
     }
   }
 
-  const rows = draft.items.map((item, index) => ({
-    id: ids[index],
-    user_id: auth.user.id,
-    supplier: draft.supplier,
-    billing_period: draft.billingPeriod,
-    activity: "electricity",
-    quantity: item.quantity,
-    unit: "kWh",
-    factor_id: "demo-electricity-v1",
-    factor_kg_co2e: 0.5,
-    is_demo: true,
-    evidence: item.evidence,
-    // PostgreSQL generates tonnes_co2e.
-  }));
-
   try {
-    const { data, error } = await auth.supabase
-      .from("emission_records")
-      .insert(rows)
-      .select("id");
+    const { data, error } = await auth.supabase.rpc(
+      "save_source_emissions",
+      {
+        p_source_id: sourceDocumentId,
+        p_supplier: draft.supplier,
+        p_billing_period: draft.billingPeriod,
+        p_items: draft.items,
+      }
+    );
 
     if (error) {
+      console.error("Source-linked save failed:", error.code);
+
       if (error.code === "23505") {
         return reply(
           {
             error:
-              "These record IDs already exist. Refresh Saved records " +
-              "to check whether an earlier save succeeded.",
+              "This source already has saved emissions. " +
+              "No additional records were added. Refresh Saved records.",
           },
           409
         );
       }
 
-      console.error("Records save failed:", error.code);
+      if (error.code === "42501") {
+        return reply(
+          { error: "The source is unavailable in your account." },
+          403
+        );
+      }
+
+      if (error.code === "22023") {
+        return reply(
+          { error: "The database rejected the activity data. Review the fields." },
+          400
+        );
+      }
 
       return reply(
-        { error: "Could not save records. Check the table and access policies." },
+        { error: "Could not save records. Check the database migration." },
         500
       );
     }
 
-    return reply({ savedCount: data.length }, 201);
+    return reply(data, 201);
   } catch {
     return reply(
       {
         error:
-          "The save could not be confirmed. Check Saved records before retrying.",
+          "The save could not be confirmed. Refresh Saved records before retrying.",
       },
       503
     );
