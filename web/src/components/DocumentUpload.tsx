@@ -123,11 +123,40 @@ export default function DocumentUpload() {
         : current
     );
   }
+  function loadSampleDraft() {
+  setFile(null);
+  setError("");
 
+  setDraft({
+    supplier: "Demo Energy",
+    billingPeriod: "1 September 2026 to 30 September 2026",
+    items: [
+      {
+        activity: "electricity",
+        quantity: 1250,
+        unit: "kWh",
+        evidence:
+          "Built-in fictional test data — not extracted from an uploaded document.",
+      },
+    ],
+    warnings: [
+      "DEMO DATA: loaded locally without Gemini. Not a verified bill.",
+    ],
+  });
+}
   return (
     <section className="card section-spacing" id="upload">
       <p className="eyebrow">START WITH THE SOURCE</p>
       <h2>Upload and review a utility bill</h2>
+      <button
+  type="button"
+  className="remove-file"
+  style={{ marginTop: 16 }}
+  disabled={loading}
+  onClick={loadSampleDraft}
+>
+  Load sample data — no Gemini usage
+</button>
 
       <div className="upload-zone">
         <label htmlFor="bill-file" className="upload-label">

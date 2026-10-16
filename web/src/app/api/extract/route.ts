@@ -4,7 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { extractionSchema } from "@/lib/extraction";
-
+import { requireUser } from "@/lib/supabase/require-user";
 const MAX_BYTES = 10 * 1024 * 1024;
 
 function reply(body: object, status = 200) {
@@ -40,6 +40,11 @@ function detectMime(bytes: Buffer): string | null {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+
+if (!auth.ok) {
+  return auth.response;
+}
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {

@@ -3,7 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { extractionSchema } from "@/lib/extraction";
-
+import { requireUser } from "@/lib/supabase/require-user";
 const requestSchema = z.object({
   reviewed: z.literal(true),
   items: extractionSchema.shape.items.min(1),
@@ -26,6 +26,11 @@ function reply(body: object, status = 200) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+
+if (!auth.ok) {
+  return auth.response;
+}
   let body: unknown;
 
   try {

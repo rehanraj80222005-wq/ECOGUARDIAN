@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import SetPassword from "@/components/SetPassword";
 
 type Mode = "signin" | "signup" | "verify";
 
@@ -251,7 +252,7 @@ setMessage(
           </form>
         </>
       )}
-
+      {user && <SetPassword key={user.id} />}
       {message && (
         <p className="info-note" role="status">{message}</p>
       )}

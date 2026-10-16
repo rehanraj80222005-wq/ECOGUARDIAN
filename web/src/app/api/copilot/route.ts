@@ -2,7 +2,7 @@ import "server-only";
 
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
-
+import { requireUser } from "@/lib/supabase/require-user";
 function jsonResponse(body: object, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -22,6 +22,11 @@ function redactSecrets(message: string, apiKey: string) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+
+if (!auth.ok) {
+  return auth.response;
+}
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   // Read the model from .env.local. Use the original model only as fallback.
