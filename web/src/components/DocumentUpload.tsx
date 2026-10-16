@@ -5,6 +5,7 @@ import type { ChangeEvent } from "react";
 import { extractionSchema } from "@/lib/extraction";
 import type { Extraction } from "@/lib/extraction";
 import EmissionCalculation from "@/components/EmissionCalculation";
+import SaveRecords from "@/components/SaveRecords";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
@@ -371,8 +372,13 @@ export default function DocumentUpload() {
                key={JSON.stringify(draft)}
                items={draft.items}
              />
+             <SaveRecords
+               key={`save-${JSON.stringify(draft)}`}
+                draft={draft}
+             />
           <p className="info-note">
-            Nothing has been saved to a database or added to emissions totals.
+            Draft edits stay in this page until you explicitly save them.
+            Saving creates new records; it does not edit previously saved records.
           </p>
         </div>
       )}
