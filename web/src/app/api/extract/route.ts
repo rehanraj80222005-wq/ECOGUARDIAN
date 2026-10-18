@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { extractionSchema } from "@/lib/extraction";
 import { requireUser } from "@/lib/supabase/require-user";
+
 const MAX_BYTES = 10 * 1024 * 1024;
 
 function reply(body: object, status = 200) {
@@ -42,20 +43,32 @@ function detectMime(bytes: Buffer): string | null {
 export async function POST(request: Request) {
   const auth = await requireUser();
 
-if (!auth.ok) {
-  return auth.response;
-}
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!auth.ok) {
+    return auth.response;
+  }
 
-  if (!apiKey) {
-    return reply({ error: "The Gemini API key is not configured." }, 503);
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const model = process.env.GEMINI_MODEL?.trim();
+  const startedAt = Date.now();
+
+  if (!apiKey || !model) {
+    return reply(
+      {
+        error:
+          "Configure GEMINI_API_KEY and GEMINI_MODEL on the server.",
+      },
+      503
+    );
   }
 
   // Early check when Content-Length is available.
   const contentLength = Number(request.headers.get("content-length"));
 
   if (contentLength > MAX_BYTES + 1024 * 1024) {
-    return reply({ error: "The upload exceeds the 10 MB file limit." }, 413);
+    return reply(
+      { error: "The upload exceeds the 10 MB file limit." },
+      413
+    );
   }
 
   let form: FormData;
@@ -63,7 +76,10 @@ if (!auth.ok) {
   try {
     form = await request.formData();
   } catch {
-    return reply({ error: "Could not read the uploaded file." }, 400);
+    return reply(
+      { error: "Could not read the uploaded file." },
+      400
+    );
   }
 
   const file = form.get("file");
@@ -99,7 +115,7 @@ if (!auth.ok) {
     });
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash",
+      model,
       contents: [
         {
           role: "user",
@@ -148,9 +164,14 @@ Return at most 30 items and warn if the document contains more.
       },
     });
 
-    if (!response.text?.trim()) {
+    const responseText = response.text?.trim();
+
+    if (!responseText) {
       return reply(
-        { error: "Gemini returned no extraction. Try a clearer document." },
+        {
+          error:
+            "Gemini returned no extraction. Try a clearer document.",
+        },
         502
       );
     }
@@ -158,10 +179,13 @@ Return at most 30 items and warn if the document contains more.
     let raw: unknown;
 
     try {
-      raw = JSON.parse(response.text);
+      raw = JSON.parse(responseText);
     } catch {
       return reply(
-        { error: "The extraction was incomplete. Try a shorter document." },
+        {
+          error:
+            "The extraction was incomplete. Try a shorter document.",
+        },
         502
       );
     }
@@ -170,10 +194,19 @@ Return at most 30 items and warn if the document contains more.
 
     if (!parsed.success) {
       return reply(
-        { error: "The extracted data failed validation. Please try again." },
+        {
+          error:
+            "The extracted data failed validation. Please try again.",
+        },
         502
       );
     }
+
+    console.log("Extraction succeeded:", {
+      model,
+      fileBytes: file.size,
+      elapsedMs: Date.now() - startedAt,
+    });
 
     return reply({ extraction: parsed.data });
   } catch (error: unknown) {
@@ -185,10 +218,17 @@ Return at most 30 items and warn if the document contains more.
         ? error.status
         : undefined;
 
-    const name = error instanceof Error ? error.name : "UnknownError";
+    const name =
+      error instanceof Error ? error.name : "UnknownError";
 
-    // Do not log bill contents or raw provider responses.
-    console.error("Extraction diagnostic:", { status, name });
+    // Do not log keys, filenames, bill contents, or raw provider responses.
+    console.error("Extraction diagnostic:", {
+      status: status ?? "not provided",
+      name,
+      model,
+      fileBytes: file.size,
+      elapsedMs: Date.now() - startedAt,
+    });
 
     if (
       name === "AbortError" ||
@@ -197,20 +237,55 @@ Return at most 30 items and warn if the document contains more.
       status === 408
     ) {
       return reply(
-        { error: "Extraction timed out. Try a smaller document or retry later." },
+        {
+          error:
+            "Extraction timed out. Try a smaller document or retry later.",
+        },
         504
       );
     }
 
-    if (status === 503 || status === 429) {
+    if (status === 503) {
       return reply(
         {
           error:
-            status === 429
-              ? "Gemini quota or rate limit reached."
-              : "Gemini is temporarily unavailable. Try again later.",
+            "Gemini is temporarily unavailable for extraction. Try again later.",
         },
-        status
+        503
+      );
+    }
+
+    if (status === 429) {
+      return reply(
+        { error: "Gemini quota or rate limit reached." },
+        429
+      );
+    }
+
+    if (status === 401 || status === 403) {
+      return reply(
+        {
+          error:
+            "Gemini access was denied. Check the server's API configuration.",
+        },
+        502
+      );
+    }
+
+    if (status === 404) {
+      return reply(
+        { error: "The configured Gemini model was not found." },
+        502
+      );
+    }
+
+    if (status === 400) {
+      return reply(
+        {
+          error:
+            "Gemini rejected the extraction request. Check the document and model configuration.",
+        },
+        502
       );
     }
 
