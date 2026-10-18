@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { z } from "zod";
+import VerifySourceFile from "@/components/VerifySourceFile";
 
 const sourceSchema = z.object({
   source: z.object({
@@ -210,6 +211,10 @@ function SourcePanel({ sourceId }: { sourceId: string }) {
               </code>
             </dd>
           </dl>
+          <VerifySourceFile
+  key={source.sha256}
+  expectedHash={source.sha256}
+/>
 
           <p className="muted">
             Metadata only. The original file is not stored. A fingerprint
