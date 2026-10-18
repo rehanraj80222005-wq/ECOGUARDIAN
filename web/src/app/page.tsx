@@ -8,6 +8,7 @@ import LiveSummary from "@/components/LiveSummary";
 import RegisteredSources from "@/components/RegisteredSources";
 import MonthlyEmissions from "@/components/MonthlyEmissions";
 import ReviewQueue from "@/components/ReviewQueue";
+import ReportReview from "@/components/ReportReview";
 
 export default function Dashboard() {
   return (
@@ -90,6 +91,8 @@ export default function Dashboard() {
 
         <AuthPanel />
         <DocumentUpload />
+        <ReportReview />
+        <a href="#report-review">GHG report review</a>
         <SavedRecords />
         <Copilot />
 
