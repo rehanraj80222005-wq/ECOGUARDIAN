@@ -36,8 +36,10 @@ export async function GET() {
       "Record ID",
       "Saved at (UTC)",
       "Supplier",
-      "Billing period",
-      "Activity",
+      "Billing period (original text)",
+"Reviewed billing start date",
+"Reviewed billing end date",
+"Activity",
       "Consumption",
       "Unit",
       "Factor ID",
@@ -57,11 +59,7 @@ export async function GET() {
     for (let offset = 0; ; offset += PAGE_SIZE) {
       const { data, error } = await auth.supabase
         .from("emission_records")
-        .select(
-          "id,created_at,supplier,billing_period,activity,quantity,unit," +
-          "factor_id,factor_kg_co2e,tonnes_co2e,is_demo," +
-          "source_document_id,source_line_index,evidence"
-        )
+        .select("id,created_at,supplier,billing_period,billing_start_date,billing_end_date,activity,quantity,unit,factor_id,factor_kg_co2e,tonnes_co2e,is_demo,source_document_id,source_line_index,evidence")
         .eq("user_id", auth.user.id)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
@@ -88,8 +86,10 @@ export async function GET() {
           [
             record.id,
             record.created_at,
-            record.supplier,
             record.billing_period,
+record.billing_start_date,
+record.billing_end_date,
+record.activity,
             record.activity,
             record.quantity,
             record.unit,
