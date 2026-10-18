@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
 import SourceDetails from "@/components/SourceDetails";
+import ExportRecords from "@/components/ExportRecords";
 
 const recordsSchema = z.object({
   records: z.array(
@@ -161,7 +162,7 @@ function RecordList() {
       >
         {loading ? "Loading…" : "Refresh records"}
       </button>
-
+<ExportRecords />
       {error && (
         <p className="copilot-error" role="alert">
           {error}
