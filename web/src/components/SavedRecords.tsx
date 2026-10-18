@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import SourceDetails from "@/components/SourceDetails";
 import ExportRecords from "@/components/ExportRecords";
 import CorrectBillingDates from "@/components/CorrectBillingDates";
+import BillingDateHistory from "@/components/BillingDateHistory";
+
+
+
+
 
 const recordsSchema = z.object({
   records: z.array(
@@ -209,6 +214,7 @@ function RecordList() {
     startDate={record.billing_start_date}
     endDate={record.billing_end_date}
   />
+  <BillingDateHistory recordId={record.id} />
 </td>
 
                     <td>
