@@ -5,12 +5,31 @@ import { z } from "zod";
 import { requireUser } from "@/lib/supabase/require-user";
 import { extractionSchema } from "@/lib/extraction";
 
+const billingDateSchema = z.string().refine((value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (value < "0001-01-01" || value > "9999-12-31") return false;
+
+  const date = new Date(`${value}T00:00:00Z`);
+
+  return (
+    Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  );
+}, "Provide a valid date in YYYY-MM-DD format.");
+
 const saveSchema = z.object({
   reviewed: z.literal(true),
   sourceDocumentId: z.string().uuid(),
+  billingStartDate: billingDateSchema,
+  billingEndDate: billingDateSchema,
   draft: extractionSchema,
-});
-
+}).refine(
+  (value) => value.billingEndDate >= value.billingStartDate,
+  {
+    message: "Billing end date cannot be before the start date.",
+    path: ["billingEndDate"],
+  }
+);
 function reply(body: object, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -26,8 +45,10 @@ export async function GET() {
     const { data, error } = await auth.supabase
       .from("emission_records")
       .select(
-        "id,created_at,supplier,billing_period,quantity,unit,tonnes_co2e,is_demo,source_document_id"
-      )
+  "id,created_at,supplier,billing_period,quantity,unit," +
+  "tonnes_co2e,is_demo,source_document_id," +
+  "billing_start_date,billing_end_date"
+)
       .eq("user_id", auth.user.id)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -61,13 +82,17 @@ export async function POST(request: Request) {
     return reply(
       {
         error:
-          "Register a source file and confirm the reviewed draft before saving.",
-      },
+"Register a source file, enter valid billing dates, and confirm the reviewed draft before saving."},
       400
     );
   }
 
-  const { draft, sourceDocumentId } = parsed.data;
+  const {
+  draft,
+  sourceDocumentId,
+  billingStartDate,
+  billingEndDate,
+} = parsed.data;
 
   if (draft.items.length === 0) {
     return reply({ error: "Add at least one activity." }, 400);
@@ -93,14 +118,16 @@ export async function POST(request: Request) {
 
   try {
     const { data, error } = await auth.supabase.rpc(
-      "save_source_emissions",
-      {
-        p_source_id: sourceDocumentId,
-        p_supplier: draft.supplier,
-        p_billing_period: draft.billingPeriod,
-        p_items: draft.items,
-      }
-    );
+  "save_dated_source_emissions",
+  {
+    p_source_id: sourceDocumentId,
+    p_supplier: draft.supplier,
+    p_billing_period: draft.billingPeriod,
+    p_items: draft.items,
+    p_billing_start_date: billingStartDate,
+    p_billing_end_date: billingEndDate,
+  }
+);
 
     if (error) {
       console.error("Source-linked save failed:", error.code);
