@@ -7,6 +7,7 @@ import AuthPanel from "@/components/AuthPanel";
 import SavedRecords from "@/components/SavedRecords";
 import LiveSummary from "@/components/LiveSummary";
 
+
 const monthlyEmissions = [
   { month: "Apr", scope1: 12, scope2: 24 },
   { month: "May", scope1: 14, scope2: 26 },
@@ -38,16 +39,16 @@ const documents = [
 ];
 
 export default function Dashboard() {
-  const [reduction, setReduction] = useState(20);
+const [reduction, setReduction] = useState(20);
 
-  const latest = monthlyEmissions[monthlyEmissions.length - 1];
-  const previous = monthlyEmissions[monthlyEmissions.length - 2];
+const latest = monthlyEmissions[monthlyEmissions.length - 1];
+const previous = monthlyEmissions[monthlyEmissions.length - 2];
 
-  const total = latest.scope1 + latest.scope2;
-  const previousTotal = previous.scope1 + previous.scope2;
-  const change = ((total - previousTotal) / previousTotal) * 100;
-  const estimatedSavings = latest.scope2 * (reduction / 100);
-  const projectedTotal = total - estimatedSavings;
+const total = latest.scope1 + latest.scope2;
+const previousTotal = previous.scope1 + previous.scope2;
+const change = ((total - previousTotal) / previousTotal) * 100;
+const estimatedSavings = latest.scope2 * (reduction / 100);
+const projectedTotal = total - estimatedSavings;
 
   return (
     <div className="app-shell">
@@ -78,7 +79,7 @@ export default function Dashboard() {
       <main>
         <header className="topbar">
           <span>Workspace / Overview</span>
-          <span className="badge">Sample data</span>
+          <span className="badge">Demo prototype</span>
         </header>
 
         <section id="overview" className="page-heading">
@@ -93,10 +94,10 @@ export default function Dashboard() {
         </section>
 
         <div className="demo-notice">
-  Top cards show all-time totals from your saved demo records.
-  The monthly chart, review queue, document table, and scenario planner
-  below are illustrative examples. All calculated emissions currently
-  use a fictional factor.
+  Top cards and the scenario planner use all-time totals from your saved
+  demo records. The monthly chart, review queue, and document table are
+  illustrative examples. All calculated emissions currently use a
+  fictional factor.
 </div>
 
         <LiveSummary />
@@ -214,43 +215,18 @@ export default function Dashboard() {
         </section>
 
         <section id="scenarios" className="card section-spacing">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">EXPLORE THE POSSIBILITIES</p>
-              <h2>What if you used less electricity?</h2>
-              <p className="muted">
-                Estimate the effect of reducing purchased electricity use.
-              </p>
-            </div>
-          </div>
+  <div className="section-heading">
+    <div>
+      <p className="eyebrow">EXPLORE THE POSSIBILITIES</p>
+      <h2>What if you used less electricity?</h2>
+      <p className="muted">
+        Explore a reduction using your saved electricity totals.
+      </p>
+    </div>
+  </div>
 
-          <div className="scenario-grid">
-            <div>
-              <label htmlFor="reduction">
-                Electricity consumption reduction: <strong>{reduction}%</strong>
-              </label>
-              <input
-                id="reduction"
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={reduction}
-                onChange={(event) => setReduction(Number(event.target.value))}
-              />
-              <p className="muted">
-                Assumes all sample Scope 2 emissions come from electricity,
-                with a constant emission factor. Scope 1 stays unchanged.
-              </p>
-            </div>
-
-            <div className="scenario-result" aria-live="polite">
-              <p>Projected monthly total</p>
-              <strong>{projectedTotal.toFixed(1)} <small>tCO₂e</small></strong>
-              <p>{estimatedSavings.toFixed(1)} tCO₂e estimated reduction</p>
-            </div>
-          </div>
-        </section>
+  <LiveSummary view="scenario" />
+</section>
         <AuthPanel />
         <DocumentUpload />
         <SavedRecords />

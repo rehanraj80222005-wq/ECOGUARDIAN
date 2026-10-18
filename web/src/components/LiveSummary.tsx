@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
-
+import ScenarioPlanner from "@/components/ScenarioPlanner";
 const summarySchema = z.object({
   recordCount: z.number().int().nonnegative(),
   totalKwh: z.number().finite().nonnegative(),
@@ -12,7 +12,13 @@ const summarySchema = z.object({
 
 type Summary = z.infer<typeof summarySchema>;
 
-export default function LiveSummary() {
+type SummaryView = "cards" | "scenario";
+
+export default function LiveSummary({
+  view = "cards",
+}: {
+  view?: SummaryView;
+}) {
   const [userId, setUserId] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
@@ -50,10 +56,10 @@ export default function LiveSummary() {
   }
 
   // Changing accounts resets the summary and cancels old requests.
-  return <SummaryCards key={userId} />;
+  return <SummaryCards key={userId} view={view} />;
 }
 
-function SummaryCards() {
+function SummaryCards({ view }: { view: SummaryView }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -147,6 +153,15 @@ function SummaryCards() {
           Retry
         </button>
       </div>
+    );
+  }
+    if (view === "scenario") {
+    return (
+      <ScenarioPlanner
+        recordCount={summary.recordCount}
+        totalKwh={summary.totalKwh}
+        totalTonnesCO2e={summary.totalTonnesCO2e}
+      />
     );
   }
 
