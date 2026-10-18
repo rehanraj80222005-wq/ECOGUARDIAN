@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
 import SourceDetails from "@/components/SourceDetails";
 import ExportRecords from "@/components/ExportRecords";
+import CorrectBillingDates from "@/components/CorrectBillingDates";
 
 const recordsSchema = z.object({
   records: z.array(
@@ -18,6 +19,8 @@ const recordsSchema = z.object({
       tonnes_co2e: z.number().finite().nonnegative(),
       is_demo: z.boolean(),
       source_document_id: z.string().uuid().nullable(),
+      billing_start_date: z.string().nullable(),
+billing_end_date: z.string().nullable(),
     })
   ),
 });
@@ -192,7 +195,21 @@ function RecordList() {
                   <tr key={record.id}>
                     <td>{record.supplier || "Not provided"}</td>
 
-                    <td>{record.billing_period || "Not provided"}</td>
+                    <td>
+  <p>{record.billing_period || "Not provided"}</p>
+
+  <p className="muted" style={{ marginTop: 6 }}>
+    {record.billing_start_date && record.billing_end_date
+      ? `${record.billing_start_date} to ${record.billing_end_date}`
+      : "Structured billing dates not set"}
+  </p>
+
+  <CorrectBillingDates
+    recordId={record.id}
+    startDate={record.billing_start_date}
+    endDate={record.billing_end_date}
+  />
+</td>
 
                     <td>
                       {record.quantity.toLocaleString()} {record.unit}
