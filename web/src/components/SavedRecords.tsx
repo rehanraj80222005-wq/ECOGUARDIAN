@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
+import SourceDetails from "@/components/SourceDetails";
 
 const recordsSchema = z.object({
   records: z.array(
@@ -219,6 +220,7 @@ function RecordList() {
                           >
                             {record.source_document_id}
                           </code>
+                          <SourceDetails sourceId={record.source_document_id} />
                         </>
                       ) : (
                         <>
