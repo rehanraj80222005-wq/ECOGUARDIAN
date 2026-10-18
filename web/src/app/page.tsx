@@ -7,6 +7,7 @@ import SavedRecords from "@/components/SavedRecords";
 import LiveSummary from "@/components/LiveSummary";
 import RegisteredSources from "@/components/RegisteredSources";
 import MonthlyEmissions from "@/components/MonthlyEmissions";
+import ReviewQueue from "@/components/ReviewQueue";
 
 export default function Dashboard() {
   return (
@@ -24,7 +25,7 @@ export default function Dashboard() {
         <nav aria-label="Main navigation">
           <a href="#overview">Overview</a>
           <a href="#documents">Document review</a>
-          <a href="#insights">Anomaly insights</a>
+          <a href="#insights">Review queue</a>
           <a href="#scenarios">Scenario planner</a>
         </nav>
 
@@ -58,41 +59,17 @@ export default function Dashboard() {
         </section>
 
         <div className="demo-notice">
-          Summary cards, the monthly chart, source documents, saved records,
-          and the scenario planner use your saved data. The review queue
-          remains an illustrative example. Monthly figures exclude undated
-          records and allocate consumption evenly across billing days.
-          All calculated emissions use a fictional factor.
+          This dashboard uses your saved records and registered sources.
+          Monthly figures exclude undated records and allocate consumption
+          evenly across billing days. The review queue checks for missing
+          information. All calculated emissions use a fictional factor.
         </div>
 
         <LiveSummary />
 
         <div className="content-grid">
           <MonthlyEmissions />
-
-          <section id="insights" className="card">
-            <p className="eyebrow">SAMPLE REVIEW QUEUE</p>
-            <h2>A closer look at September</h2>
-
-            <div className="alert">
-              <strong>Fleet fuel consumption increased</strong>
-              <p>
-                The example fuel log shows a 36.7% increase:
-                8,200 litres versus a 6,000-litre baseline.
-              </p>
-            </div>
-
-            <p className="muted">
-              This exceeds the proposed 30% review threshold. Check billing
-              dates, fleet activity, and duplicate entries before drawing
-              conclusions.
-            </p>
-
-            <div className="info-note">
-              Illustrative example, not calculated from your saved records.
-              Gemini explanations will be connected in a later step.
-            </div>
-          </section>
+          <ReviewQueue />
         </div>
 
         <RegisteredSources />
