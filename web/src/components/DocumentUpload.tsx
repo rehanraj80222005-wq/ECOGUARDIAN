@@ -284,13 +284,14 @@ export default function DocumentUpload() {
             </a>
           )}
 
-          <DocumentFingerprint
-            key={selectionVersion}
-            file={file}
-            onRegistered={(documentId) => {
-              setSource({ file, documentId });
-            }}
-          />
+         <DocumentFingerprint
+  key={selectionVersion}
+  file={file}
+  onRegistered={(documentId) => {
+    setSource({ file, documentId });
+    window.dispatchEvent(new Event("ecoguardian-sources-changed"));
+  }}
+/>
 
           <button
             type="button"

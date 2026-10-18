@@ -6,7 +6,7 @@ import DocumentUpload from "@/components/DocumentUpload";
 import AuthPanel from "@/components/AuthPanel";
 import SavedRecords from "@/components/SavedRecords";
 import LiveSummary from "@/components/LiveSummary";
-
+import RegisteredSources from "@/components/RegisteredSources";
 
 const monthlyEmissions = [
   { month: "Apr", scope1: 12, scope2: 24 },
@@ -17,26 +17,7 @@ const monthlyEmissions = [
   { month: "Sep", scope1: 22, scope2: 27 },
 ];
 
-const documents = [
-  {
-    name: "September electricity bill.pdf",
-    activity: "Electricity",
-    quantity: "38,000 kWh",
-    status: "Needs review",
-  },
-  {
-    name: "September fleet fuel.csv",
-    activity: "Diesel",
-    quantity: "8,200 litres",
-    status: "Anomaly flagged",
-  },
-  {
-    name: "August electricity bill.pdf",
-    activity: "Electricity",
-    quantity: "32,400 kWh",
-    status: "Reviewed",
-  },
-];
+
 
 export default function Dashboard() {
 const [reduction, setReduction] = useState(20);
@@ -94,8 +75,8 @@ const projectedTotal = total - estimatedSavings;
         </section>
 
         <div className="demo-notice">
-  Top cards and the scenario planner use all-time totals from your saved
-  demo records. The monthly chart, review queue, and document table are
+  Summary cards, source documents, saved records, and the scenario planner
+  use your saved data. The monthly chart and review queue remain
   illustrative examples. All calculated emissions currently use a
   fictional factor.
 </div>
@@ -169,50 +150,7 @@ const projectedTotal = total - estimatedSavings;
           </section>
         </div>
 
-        <section id="documents" className="card section-spacing">
-          <div className="section-heading">
-            <div>
-              <h2>Document review</h2>
-              <p className="muted">
-                Example records showing the review workflow.
-              </p>
-            </div>
-            <span className="badge">3 sample documents</span>
-          </div>
-
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Document</th>
-                  <th>Activity</th>
-                  <th>Reported quantity</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((document) => (
-                  <tr key={document.name}>
-                    <td>{document.name}</td>
-                    <td>{document.activity}</td>
-                    <td>{document.quantity}</td>
-                    <td>
-                      <span
-                        className={`status ${
-                          document.status === "Reviewed"
-                            ? "status-reviewed"
-                            : "status-review"
-                        }`}
-                      >
-                        {document.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <RegisteredSources />
 
         <section id="scenarios" className="card section-spacing">
   <div className="section-heading">
