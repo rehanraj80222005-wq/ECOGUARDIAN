@@ -7,6 +7,8 @@ import { z } from "zod";
 import { requireUser } from "@/lib/supabase/require-user";
 import { reportExtractionSchema } from "@/lib/report-extraction";
 
+export const maxDuration = 60;
+
 const MAX_BYTES = 3 * 1024 * 1024;
 
 const pagesSchema = z
@@ -107,6 +109,29 @@ function parseResponseJson(text: string): unknown {
   const json = fenced ? fenced[1].trim() : trimmed;
 
   return JSON.parse(json);
+}
+
+async function retryOnceOnUnavailable<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error: unknown) {
+    if (getErrorStatus(error) !== 503 || signal.aborted) {
+      throw error;
+    }
+
+    console.warn("Report retry diagnostic:", {
+      status: 503,
+      nextAttempt: 2,
+      delayMs: 2000,
+    });
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+    signal.throwIfAborted();
+    return await operation();
+  }
 }
 
 export async function POST(request: Request) {
@@ -212,12 +237,12 @@ export async function POST(request: Request) {
     const ai = new GoogleGenAI({
       apiKey,
       httpOptions: {
-        timeout: 45_000,
+        timeout: 25_000,
         retryOptions: { attempts: 1 },
       },
     });
 
-    const response = await ai.models.generateContent({
+    const generate = () => ai.models.generateContent({
       model,
       contents: [
         {
@@ -238,10 +263,13 @@ export async function POST(request: Request) {
         },
       ],
       config: {
+        abortSignal: request.signal,
         responseMimeType: "application/json",
         maxOutputTokens: 8192,
       },
     });
+
+    const response = await retryOnceOnUnavailable(generate, request.signal);
 
     const responseText = response.text?.trim() ?? "";
     const finishReason =
@@ -379,7 +407,7 @@ export async function POST(request: Request) {
 
     if (status === 503) {
       return reply(
-        { error: "Gemini is temporarily unavailable. Try again later." },
+        { error: "Gemini is still unavailable after one automatic retry. Please try again later." },
         503
       );
     }
