@@ -4,6 +4,9 @@ import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/supabase/require-user";
+import { checkAiRequestLimit } from "@/lib/ai-request-limit";
+
+
 
 const summarySchema = z.object({
   recordCount: z.number().int().nonnegative(),
@@ -112,6 +115,11 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
 
   try {
+    const limitResponse = await checkAiRequestLimit(auth.supabase);
+
+if (limitResponse) {
+  return limitResponse;
+}
     const ai = new GoogleGenAI({
       apiKey,
       httpOptions: {

@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/supabase/require-user";
 import { reportExtractionSchema } from "@/lib/report-extraction";
+import { checkAiRequestLimit } from "@/lib/ai-request-limit";
 
 export const maxDuration = 60;
 
@@ -234,6 +235,11 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
 
   try {
+    const limitResponse = await checkAiRequestLimit(auth.supabase);
+
+if (limitResponse) {
+  return limitResponse;
+}
     const ai = new GoogleGenAI({
       apiKey,
       httpOptions: {
