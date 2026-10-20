@@ -83,28 +83,28 @@ export async function GET() {
 
       for (const record of data) {
         lines.push(
-          [
-            record.id,
-            record.created_at,
-            record.billing_period,
-record.billing_start_date,
-record.billing_end_date,
-record.activity,
-            record.activity,
-            record.quantity,
-            record.unit,
-            record.factor_id,
-            record.factor_kg_co2e,
-            record.tonnes_co2e,
-            record.is_demo ? "Yes" : "No",
-            record.source_document_id,
-            record.source_line_index,
-            record.source_document_id
-              ? "Linked source"
-              : "Legacy record — no source linked",
-            record.evidence,
-          ].map(csvCell).join(",")
-        );
+  [
+    record.id,
+    record.created_at,
+    record.supplier,
+    record.billing_period,
+    record.billing_start_date,
+    record.billing_end_date,
+    record.activity,
+    record.quantity,
+    record.unit,
+    record.factor_id,
+    record.factor_kg_co2e,
+    record.tonnes_co2e,
+    record.is_demo ? "Yes" : "No",
+    record.source_document_id,
+    record.source_line_index,
+    record.source_document_id
+      ? "Linked source"
+      : "Legacy record — no source linked",
+    record.evidence,
+  ].map(csvCell).join(",")
+);
       }
 
       if (data.length < PAGE_SIZE) break;

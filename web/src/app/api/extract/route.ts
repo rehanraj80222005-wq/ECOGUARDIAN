@@ -6,7 +6,7 @@ import { z } from "zod";
 import { extractionSchema } from "@/lib/extraction";
 import { requireUser } from "@/lib/supabase/require-user";
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 3 * 1024 * 1024;
 
 function reply(body: object, status = 200) {
   return NextResponse.json(body, {

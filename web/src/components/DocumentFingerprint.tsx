@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
 const fingerprintSchema = z.object({
@@ -10,6 +10,7 @@ const fingerprintSchema = z.object({
   documentId: z.string().uuid(),
   alreadyRegistered: z.boolean(),
 });
+
 type Fingerprint = z.infer<typeof fingerprintSchema>;
 
 export default function DocumentFingerprint({
@@ -23,8 +24,20 @@ export default function DocumentFingerprint({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      requestRef.current?.abort();
+      requestRef.current = null;
+    };
+  }, []);
+
   async function fingerprint() {
-    if (busy) return;
+    if (requestRef.current) return;
+
+    const controller = new AbortController();
+    requestRef.current = controller;
 
     setBusy(true);
     setError("");
@@ -37,10 +50,11 @@ export default function DocumentFingerprint({
       const response = await fetch("/api/fingerprint", {
         method: "POST",
         body: form,
+        signal: controller.signal,
       });
 
       const text = await response.text();
-      let data;
+      let data: unknown;
 
       try {
         data = JSON.parse(text);
@@ -51,7 +65,15 @@ export default function DocumentFingerprint({
       }
 
       if (!response.ok) {
-        throw new Error(data?.error || "Fingerprinting failed.");
+        const message =
+          typeof data === "object" &&
+          data !== null &&
+          "error" in data &&
+          typeof data.error === "string"
+            ? data.error
+            : "Fingerprinting failed.";
+
+        throw new Error(message);
       }
 
       const parsed = fingerprintSchema.safeParse(data);
@@ -60,14 +82,32 @@ export default function DocumentFingerprint({
         throw new Error("The fingerprint response could not be validated.");
       }
 
+      if (
+        controller.signal.aborted ||
+        requestRef.current !== controller
+      ) {
+        return;
+      }
+
       setResult(parsed.data);
       onRegistered(parsed.data.documentId);
     } catch (error: unknown) {
-      setError(
-        error instanceof Error ? error.message : "Fingerprinting failed."
-      );
+      if (
+        !controller.signal.aborted &&
+        requestRef.current === controller
+      ) {
+        setError(
+          error instanceof Error ? error.message : "Fingerprinting failed."
+        );
+      }
     } finally {
-      setBusy(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+
+        if (!controller.signal.aborted) {
+          setBusy(false);
+        }
+      }
     }
   }
 
@@ -76,9 +116,9 @@ export default function DocumentFingerprint({
       <h3>Source-file fingerprint</h3>
 
       <p className="muted">
-  Registers this file’s name, size, type, and fingerprint in your account.
-  The original file is not stored, and Gemini is not called.
-</p>
+        Registers this file’s name, size, type, and fingerprint in your
+        account. The original file is not stored, and Gemini is not called.
+      </p>
 
       <button
         type="button"
@@ -90,24 +130,29 @@ export default function DocumentFingerprint({
       </button>
 
       {error && (
-        <p className="copilot-error" role="alert">{error}</p>
+        <p className="copilot-error" role="alert">
+          {error}
+        </p>
       )}
 
       <div aria-live="polite" aria-busy={busy}>
         {result && (
           <div className="calculation-result">
             <p role="status">
-  <strong>
-    {result.alreadyRegistered
-      ? "This file is already registered in your account."
-      : "Source fingerprint registered successfully."}
-  </strong>
-</p>
+              <strong>
+                {result.alreadyRegistered
+                  ? "This file is already registered in your account."
+                  : "Source fingerprint registered successfully."}
+              </strong>
+            </p>
 
-<p style={{ overflowWrap: "anywhere", marginTop: 8 }}>
-  Source document ID: {result.documentId}
-</p>
-            <p><strong>{result.algorithm}</strong></p>
+            <p style={{ overflowWrap: "anywhere", marginTop: 8 }}>
+              Source document ID: {result.documentId}
+            </p>
+
+            <p>
+              <strong>{result.algorithm}</strong>
+            </p>
 
             <code
               style={{

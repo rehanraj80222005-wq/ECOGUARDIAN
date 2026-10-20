@@ -1,23 +1,76 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { extractionSchema } from "@/lib/extraction";
 import type { Extraction } from "@/lib/extraction";
 import EmissionCalculation from "@/components/EmissionCalculation";
 import SaveRecords from "@/components/SaveRecords";
 import DocumentFingerprint from "@/components/DocumentFingerprint";
+import { createClient } from "@/lib/supabase/client";
 
-const MAX_BYTES = 10 * 1024 * 1024;
+
+
+const MAX_BYTES = 3 * 1024 * 1024;
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 
 export default function DocumentUpload() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [sessionError, setSessionError] = useState("");
+
+  useEffect(() => {
+    try {
+      const { data } = createClient().auth.onAuthStateChange(
+        (_event, session) => {
+          setUserId(session?.user.id ?? null);
+          setChecking(false);
+        }
+      );
+
+      return () => data.subscription.unsubscribe();
+    } catch {
+      setSessionError("Could not initialize your account session.");
+      setChecking(false);
+    }
+  }, []);
+
+  if (checking || sessionError || !userId) {
+    return (
+      <section id="upload" className="card section-spacing">
+        <h2>Upload and review a utility bill</h2>
+
+        {sessionError ? (
+          <p className="copilot-error" role="alert">
+            {sessionError}
+          </p>
+        ) : checking ? (
+          <p className="muted">Checking your session…</p>
+        ) : (
+          <p className="info-note">
+            <a href="#workspace-account">Sign in to review a bill.</a>
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  return <BillWorkflow key={userId} />;
+}
+
+function BillWorkflow() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<Extraction | null>(null);
+  const extractionRequestRef = useRef<AbortController | null>(null);
 
+useEffect(() => {
+  return () => {
+    extractionRequestRef.current?.abort();
+    extractionRequestRef.current = null;
+  };
+}, []);
   const [source, setSource] = useState<{
     file: File;
     documentId: string;
@@ -76,72 +129,88 @@ export default function DocumentUpload() {
   }
 
   async function extract() {
-    if (!file || loading) return;
+  if (!file || extractionRequestRef.current) return;
 
-    setLoading(true);
-    setError("");
-    setDraft(null);
+  const controller = new AbortController();
+  extractionRequestRef.current = controller;
+
+  setLoading(true);
+  setError("");
+  setDraft(null);
+
+  try {
+    const form = new FormData();
+    form.append("file", file);
+
+    const response = await fetch("/api/extract", {
+      method: "POST",
+      body: form,
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data: unknown;
 
     try {
-      const form = new FormData();
-      form.append("file", file);
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(
+        `Unexpected server response (HTTP ${response.status}).`
+      );
+    }
 
-      const response = await fetch("/api/extract", {
-        method: "POST",
-        body: form,
-      });
-
-      // The browser sets the multipart Content-Type automatically.
-      const text = await response.text();
-
-      if (!text.trim()) {
-        throw new Error(`Empty server response (HTTP ${response.status}).`);
-      }
-
-      let data: unknown;
-
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(
-          `Invalid server response (HTTP ${response.status}). Check the terminal.`
-        );
-      }
-
-      if (!response.ok) {
-        const message =
-          typeof data === "object" &&
-          data !== null &&
-          "error" in data &&
-          typeof data.error === "string"
-            ? data.error
-            : `Extraction failed (HTTP ${response.status}).`;
-
-        throw new Error(message);
-      }
-
-      const extraction =
+    if (!response.ok) {
+      const message =
         typeof data === "object" &&
         data !== null &&
-        "extraction" in data
-          ? data.extraction
-          : undefined;
+        "error" in data &&
+        typeof data.error === "string"
+          ? data.error
+          : `Extraction failed (HTTP ${response.status}).`;
 
-      const parsed = extractionSchema.safeParse(extraction);
+      throw new Error(message);
+    }
 
-      if (!parsed.success) {
-        throw new Error("The server returned an unexpected extraction.");
-      }
+    const extraction =
+      typeof data === "object" &&
+      data !== null &&
+      "extraction" in data
+        ? data.extraction
+        : undefined;
 
-      setDraft(parsed.data);
-    } catch (error: unknown) {
+    const parsed = extractionSchema.safeParse(extraction);
+
+    if (!parsed.success) {
+      throw new Error("The server returned an unexpected extraction.");
+    }
+
+    if (
+      controller.signal.aborted ||
+      extractionRequestRef.current !== controller
+    ) {
+      return;
+    }
+
+    setDraft(parsed.data);
+  } catch (error: unknown) {
+    if (
+      !controller.signal.aborted &&
+      extractionRequestRef.current === controller
+    ) {
       setError(
         error instanceof Error ? error.message : "Extraction failed."
       );
-    } finally {
-      setLoading(false);
+    }
+  } finally {
+    if (extractionRequestRef.current === controller) {
+      extractionRequestRef.current = null;
+
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }
+}
 
   function editItem(
     index: number,
