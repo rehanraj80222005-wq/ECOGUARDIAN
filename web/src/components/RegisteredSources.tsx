@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
 import SourceDetails from "@/components/SourceDetails";
+import SourceCategory from "@/components/SourceCategory";
+
+
 
 const sourcesSchema = z.object({
   sources: z.array(
@@ -215,7 +218,14 @@ function SourceList() {
                     </time>
                   </td>
 
-                  <td>{source.saved_record_count.toLocaleString()}</td>
+                  <td>
+  <p>{source.saved_record_count.toLocaleString()}</p>
+
+  <SourceCategory
+    sourceId={source.id}
+    hasRecords={source.saved_record_count > 0}
+  />
+</td>
 
                   <td>
                     <span
@@ -226,8 +236,8 @@ function SourceList() {
                       }`}
                     >
                       {source.saved_record_count > 0
-                        ? "Has saved emissions"
-                        : "No emissions saved"}
+  ? "Has saved activity records"
+  : "No linked activity records"}
                     </span>
 
                     <SourceDetails sourceId={source.id} />

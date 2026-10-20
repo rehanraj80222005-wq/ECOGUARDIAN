@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   if (file.size === 0 || file.size > MAX_BYTES) {
     return reply(
-      { error: "Choose a non-empty file no larger than 10 MB." },
+      { error: "Choose a non-empty file no larger than 3 MB." },
       400
     );
   }
