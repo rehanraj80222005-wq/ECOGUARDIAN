@@ -236,10 +236,7 @@ export async function POST(request: Request) {
 
   try {
     const limitResponse = await checkAiRequestLimit(auth.supabase);
-
-if (limitResponse) {
-  return limitResponse;
-}
+if (limitResponse) return limitResponse;
     const ai = new GoogleGenAI({
       apiKey,
       httpOptions: {
