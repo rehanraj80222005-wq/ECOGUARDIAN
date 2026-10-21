@@ -105,4 +105,12 @@ for file in "${files[@]}"; do
 done
 
 echo "PASS: all 14 migrations executed in order on fresh PostgreSQL."
+
+echo "Running database behavior tests."
+
+docker exec -i "$SERVER" \
+  psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/tests/behavior.sql
+
+echo "PASS: database behavior tests completed."
 echo "Scope: minimal Auth simulation; not a full Supabase stack test."
