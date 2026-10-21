@@ -6,7 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import SetPassword from "@/components/SetPassword";
 import ForgotPassword from "@/components/ForgotPassword";
-
+import ResendConfirmation from "@/components/ResendConfirmation";
 
 type Mode = "signin" | "signup" | "verify";
 
@@ -254,7 +254,12 @@ setMessage(
           </form>
         </>
       )}
-      {!checking && !user && <ForgotPassword />}
+      {!checking && !user && (
+  <>
+    <ResendConfirmation />
+    <ForgotPassword />
+  </>
+)}
 
 {user && <SetPassword key={user.id} />}
       {message && (
