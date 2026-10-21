@@ -133,14 +133,12 @@ For a new, empty database, the intended order is:
 14. `supabase/guard-source-activity-kind.sql`
 
 **Fresh-database setup has not yet been verified end to end.**
-Validate this sequence in a separate test project before relying on it.
+The 14 migrations passed an ordered clean-install test on PostgreSQL 17
+using a minimal simulated Supabase Auth schema. Permissions and core save
+behaviour were separately tested in a hosted Supabase test project.
 
-Several files create tables, columns, or functions without rerun guards.
-Do not rerun the entire sequence against an existing populated project.
-
-The classification migration replaces the review-summary function so
-sources labelled as GHG reports are excluded from the missing-activity
-check. Unclassified sources remain included.
+A clean full-stack Supabase installation has not yet been verified;
+local testing was blocked by container-to-container connectivity.
 
 ## Authentication configuration
 
