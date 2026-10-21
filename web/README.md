@@ -130,6 +130,7 @@ For a new, empty database, the intended order is:
 11. `supabase/ai-request-limits.sql`
 12. `supabase/source-document-kinds.sql`
 13. `supabase/classify-source-documents.sql`
+14. `supabase/guard-source-activity-kind.sql`
 
 **Fresh-database setup has not yet been verified end to end.**
 Validate this sequence in a separate test project before relying on it.
