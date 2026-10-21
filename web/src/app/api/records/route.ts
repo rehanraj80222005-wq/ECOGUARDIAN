@@ -151,11 +151,32 @@ export async function POST(request: Request) {
       }
 
       if (error.code === "22023") {
-        return reply(
-          { error: "The database rejected the activity data. Review the fields." },
-          400
-        );
-      }
+  if (
+    error.message ===
+    "A GHG report cannot receive saved electricity activity"
+  ) {
+    return reply(
+      {
+        error:
+          "This source is classified as a GHG report, so electricity " +
+          "activity cannot be saved against it. If you selected the " +
+          "wrong file, upload the correct utility bill. If the source " +
+          "really is a utility bill, change its category in Source " +
+          "documents, then retry. No records were added.",
+      },
+      400
+    );
+  }
+
+  return reply(
+    {
+      error:
+        "The database rejected the activity data or billing dates. " +
+        "Review the fields before retrying.",
+    },
+    400
+  );
+}
 
       return reply(
         { error: "Could not save records. Check the database migration." },
