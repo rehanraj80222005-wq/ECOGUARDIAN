@@ -120,4 +120,11 @@ docker exec -i "$SERVER" \
   < supabase/tests/monthly-emissions.sql
 
 echo "PASS: monthly emissions tests completed."
+echo "Running AI request-limit tests."
+
+docker exec -i "$SERVER" \
+  psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/tests/ai-request-limits.sql
+
+echo "PASS: AI request-limit tests completed."
 echo "Scope: minimal Auth simulation; not a full Supabase stack test."
