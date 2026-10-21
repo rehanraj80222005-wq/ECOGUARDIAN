@@ -138,7 +138,13 @@ export default function Dashboard() {
               <MonthlyEmissions />
               <div className="workspace-review">
                 <ReviewQueue />
-                <p className="workspace-context">A source without saved activity is not necessarily an error. A registered GHG report may have no utility-bill activity. These checks do not yet classify documents by purpose.</p>
+                <p className="workspace-context">
+  Missing-activity checks include utility bills and unclassified sources.
+  Sources classified as GHG reports are excluded from that check.
+  Categories are user-selected and do not verify document contents.
+  {" "}
+  <a href="#workspace-sources">Review source categories →</a>
+</p>
               </div>
             </div>
           </div>
