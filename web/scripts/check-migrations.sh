@@ -113,4 +113,11 @@ docker exec -i "$SERVER" \
   < supabase/tests/behavior.sql
 
 echo "PASS: database behavior tests completed."
+echo "Running monthly emissions tests."
+
+docker exec -i "$SERVER" \
+  psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/tests/monthly-emissions.sql
+
+echo "PASS: monthly emissions tests completed."
 echo "Scope: minimal Auth simulation; not a full Supabase stack test."
