@@ -1,0 +1,279 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/client";
+import { reportExtractionSchema } from "@/lib/report-extraction";
+
+const savedReportSchema = z.object({
+  id: z.string().uuid(),
+  created_at: z.string(),
+  original_name: z.string(),
+  original_size_bytes: z.number().int().positive(),
+  original_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  original_pages: z.array(z.number().int().min(1).max(500)).min(1).max(3),
+  reviewed: z.literal(true),
+  report: reportExtractionSchema,
+}).refine(
+  (saved) =>
+    saved.report.figures.every(
+      (figure) => figure.excerptPage <= saved.original_pages.length
+    ),
+  "Invalid source page reference."
+);
+
+const responseSchema = z.object({
+  reports: z.array(savedReportSchema).max(10),
+});
+
+type SavedReport = z.infer<typeof savedReportSchema>;
+
+export default function SavedReports() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    try {
+      const { data } = createClient().auth.onAuthStateChange(
+        (_event, session) => {
+          setUserId(session?.user.id ?? null);
+          setChecking(false);
+        }
+      );
+
+      return () => data.subscription.unsubscribe();
+    } catch {
+      setError("Could not initialize the saved-reports session.");
+      setChecking(false);
+    }
+  }, []);
+
+  return (
+    <section className="card section-spacing">
+      <p className="eyebrow">REPORTED EMISSIONS</p>
+      <h2>Saved GHG reports</h2>
+
+      <p className="muted">
+        Latest 10 reviewed snapshots. These reported figures remain
+        separate from your calculated electricity totals.
+      </p>
+
+      {error ? (
+        <p className="copilot-error" role="alert">{error}</p>
+      ) : checking ? (
+        <p className="muted">Checking your session…</p>
+      ) : userId ? (
+        <ReportsList key={userId} />
+      ) : (
+        <p className="info-note">Sign in to view your saved reports.</p>
+      )}
+    </section>
+  );
+}
+
+function ReportsList() {
+  const [reports, setReports] = useState<SavedReport[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
+  const [refresh, setRefresh] = useState(0);
+
+  const controllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    function refreshReports() {
+      setRefresh((value) => value + 1);
+    }
+
+    window.addEventListener("ghg-reports-changed", refreshReports);
+
+    return () => {
+      window.removeEventListener("ghg-reports-changed", refreshReports);
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
+    async function load() {
+      setBusy(true);
+      setError("");
+
+      try {
+        const response = await fetch("/api/reports", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        const text = await response.text();
+        let body: unknown;
+
+        try {
+          body = JSON.parse(text);
+        } catch {
+          throw new Error(
+            `Unexpected server response (HTTP ${response.status}).`
+          );
+        }
+
+        if (!response.ok) {
+          const message =
+            typeof body === "object" &&
+            body !== null &&
+            "error" in body &&
+            typeof body.error === "string"
+              ? body.error
+              : "Could not load saved reports.";
+
+          throw new Error(message);
+        }
+
+        const parsed = responseSchema.safeParse(body);
+
+        if (!parsed.success) {
+          throw new Error("The saved report response could not be validated.");
+        }
+
+        if (controller.signal.aborted) return;
+
+        setReports(parsed.data.reports);
+        setLoaded(true);
+      } catch (cause: unknown) {
+        if (!controller.signal.aborted) {
+          setReports([]);
+          setLoaded(false);
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load saved reports."
+          );
+        }
+      } finally {
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+
+          if (!controller.signal.aborted) {
+            setBusy(false);
+          }
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      controller.abort();
+    };
+  }, [refresh]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        className="secondary-button"
+        disabled={busy}
+        onClick={() => setRefresh((value) => value + 1)}
+        style={{ margin: "16px 0" }}
+      >
+        {busy ? "Loading…" : "Refresh saved reports"}
+      </button>
+
+      {error && (
+        <p className="copilot-error" role="alert">{error}</p>
+      )}
+
+      <div aria-live="polite" aria-busy={busy}>
+        {loaded && !busy && reports.length === 0 && (
+          <p className="muted">
+            No saved GHG reports yet. Extract a report, review its figures,
+            and save the reviewed snapshot.
+          </p>
+        )}
+      </div>
+
+      {reports.map((saved) => (
+        <details className="extracted-item" key={saved.id}>
+          <summary style={{ cursor: "pointer", overflowWrap: "anywhere" }}>
+            <strong>{saved.original_name}</strong>
+            {" · "}
+            {saved.report.figures.length} figures
+          </summary>
+
+          <p className="muted">
+            Saved: {new Date(saved.created_at).toLocaleString()}
+          </p>
+
+          <p>
+            Original PDF pages: {saved.original_pages.join(", ")}
+          </p>
+
+          <p className="info-note">
+            User-reviewed snapshot, not independent verification.
+            The original PDF is not stored.
+          </p>
+
+          {saved.report.warnings.length > 0 && (
+            <div className="alert">
+              <strong>Extraction notes retained with this snapshot</strong>
+              <ul>
+                {saved.report.warnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {saved.report.figures.map((figure, index) => (
+            <article className="extracted-item" key={index}>
+              <h3>{figure.scope}: {figure.label}</h3>
+
+              <p>
+                <strong>
+                  {figure.reportedValue ?? "Not identified"}
+                  {" "}
+                  {figure.unit ?? "(unit not identified)"}
+                </strong>
+              </p>
+
+              <p>Organization: {figure.organization || "Not stated"}</p>
+              <p>Reporting period: {figure.reportingPeriod || "Not stated"}</p>
+              <p>Boundary: {figure.boundary || "Not stated"}</p>
+              <p>Accounting basis: {figure.basis}</p>
+              <p>
+                Original PDF page:{" "}
+                {saved.original_pages[figure.excerptPage - 1]}
+              </p>
+
+              <blockquote style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                {figure.evidence}
+              </blockquote>
+            </article>
+          ))}
+
+          <details>
+            <summary>File identification</summary>
+            <p>{saved.original_size_bytes.toLocaleString()} bytes</p>
+            <p style={{ overflowWrap: "anywhere" }}>
+              Save ID: {saved.id}
+            </p>
+            <p>Original file SHA-256:</p>
+            <code style={{ display: "block", overflowWrap: "anywhere" }}>
+              {saved.original_sha256}
+            </code>
+            <p className="muted">
+              This fingerprint identifies file contents; it does not
+              prove authenticity.
+            </p>
+          </details>
+
+          <p className="info-note">
+            Do not add overlapping figures or alternative Scope 2
+            accounting bases together. No demo emission factor is applied.
+          </p>
+        </details>
+      ))}
+    </div>
+  );
+}

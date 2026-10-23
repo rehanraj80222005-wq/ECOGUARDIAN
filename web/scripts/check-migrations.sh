@@ -22,6 +22,7 @@ files=(
   supabase/source-document-kinds.sql
   supabase/classify-source-documents.sql
   supabase/guard-source-activity-kind.sql
+  supabase/saved-ghg-reports.sql
 )
 
 for file in "${files[@]}"; do
@@ -31,8 +32,8 @@ for file in "${files[@]}"; do
   fi
 done
 
-if [ "${#files[@]}" -ne 14 ]; then
-  echo "Expected 14 migrations; found ${#files[@]}."
+if [ "${#files[@]}" -ne 15 ]; then
+  echo "Expected 15 migrations; found ${#files[@]}."
   exit 1
 fi
 
@@ -104,7 +105,7 @@ for file in "${files[@]}"; do
     < "$file"
 done
 
-echo "PASS: all 14 migrations executed in order on fresh PostgreSQL."
+echo "PASS: all 15 migrations executed in order on fresh PostgreSQL."
 
 echo "Running database behavior tests."
 

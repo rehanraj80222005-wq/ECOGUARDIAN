@@ -6,6 +6,8 @@ import { PDFDocument } from "pdf-lib";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
 import { reportExtractionSchema } from "@/lib/report-extraction";
+import SaveReport from "@/components/SaveReport";
+import SavedReports from "@/components/SavedReports";
 
 const responseSchema = z.object({
   report: reportExtractionSchema,
@@ -53,7 +55,9 @@ export default function ReportReview() {
         <ReportForm key={userId} />
       ) : (
         <p className="info-note">Sign in to review a report.</p>
-      )}
+            )}
+
+      <SavedReports />
     </section>
   );
 }
@@ -336,6 +340,7 @@ function ReportForm() {
           page labels. Select up to three consecutive pages containing
           emissions tables and their headings.
         </p>
+        
 
         <p className="muted">
           Clicking Extract sends a PDF excerpt of the selected pages to
@@ -363,7 +368,8 @@ function ReportForm() {
             <p className="info-note">
               Selected original PDF pages: {result.originalPages.join(", ")}.
               Compare every figure and quotation with the original.
-              Results are not saved and will be lost on refresh.
+              Extraction drafts are lost on refresh unless you save a reviewed
+snapshot using the form below.
             </p>
 
             {result.report.warnings.length > 0 && (
@@ -419,6 +425,13 @@ function ReportForm() {
               Scope 2 accounting bases together. No demonstration emission
               factor has been applied.
             </p>
+            {file && result.report.figures.length > 0 && (
+  <SaveReport
+    file={file}
+    report={result.report}
+    originalPages={result.originalPages}
+  />
+)}
           </div>
         )}
       </div>
