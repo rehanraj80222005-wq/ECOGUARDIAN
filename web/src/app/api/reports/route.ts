@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/supabase/require-user";
 import { reportExtractionSchema } from "@/lib/report-extraction";
+import { isDeepStrictEqual } from "node:util";
+
 
 const MAX_REQUEST_BYTES = 300 * 1024;
 
@@ -186,15 +188,69 @@ export async function POST(request: Request) {
     if (error) {
       console.error("Report save failed:", error.code);
 
-      if (error.code === "23505") {
-        return reply(
-          {
-            error:
-              "This save ID already exists. Refresh saved reports " +
-              "and check the existing entry before trying another save.",
+            if (error.code === "23505") {
+        const { data: existing, error: lookupError } =
+          await auth.supabase
+            .from("saved_ghg_reports")
+            .select(
+              "id,created_at,original_name,original_size_bytes,original_sha256,original_pages,reviewed,report"
+            )
+            .eq("id", input.id)
+            .eq("user_id", auth.user.id)
+            .maybeSingle();
+
+        if (lookupError) {
+          console.error("Report retry lookup failed:", lookupError.code);
+
+          return reply(
+            {
+              error:
+                "The previous save could not be checked. " +
+                "Retry the same save or refresh saved reports.",
+            },
+            503
+          );
+        }
+
+        // Do not disclose whether this ID belongs to another account.
+        if (!existing) {
+          return reply(
+            {
+              error:
+                "This save ID cannot be reused for this report. " +
+                "Refresh saved reports before continuing.",
+            },
+            409
+          );
+        }
+
+        const identical =
+          existing.id === input.id &&
+          existing.original_name === input.originalName &&
+          existing.original_size_bytes === input.originalSizeBytes &&
+          existing.original_sha256 === input.originalSha256 &&
+          existing.reviewed === input.reviewed &&
+          isDeepStrictEqual(existing.original_pages, input.originalPages) &&
+          isDeepStrictEqual(existing.report, input.report);
+
+        if (!identical) {
+          return reply(
+            {
+              error:
+                "This save ID already contains different report content. " +
+                "The existing snapshot was not changed.",
+            },
+            409
+          );
+        }
+
+        return reply({
+          savedReport: {
+            id: existing.id,
+            created_at: existing.created_at,
           },
-          409
-        );
+          alreadySaved: true,
+        });
       }
 
       if (error.code === "42501") {
