@@ -1,36 +1,52 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
 import { reportExtractionSchema } from "@/lib/report-extraction";
 
-const savedReportSchema = z.object({
+const savedReportSchema = z
+  .object({
+    id: z.string().uuid(),
+    created_at: z.iso.datetime({ offset: true }),
+    original_name: z.string(),
+    original_size_bytes: z.number().int().positive(),
+    original_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    original_pages: z
+      .array(z.number().int().min(1).max(500))
+      .min(1)
+      .max(3),
+    reviewed: z.literal(true),
+    report: reportExtractionSchema,
+  })
+  .refine(
+    (saved) =>
+      saved.report.figures.every(
+        (figure) =>
+          figure.excerptPage <= saved.original_pages.length
+      ),
+    "Invalid source page reference."
+  );
+
+const cursorSchema = z.object({
+  createdAt: z.iso.datetime({ offset: true }),
   id: z.string().uuid(),
-  created_at: z.string(),
-  original_name: z.string(),
-  original_size_bytes: z.number().int().positive(),
-  original_sha256: z.string().regex(/^[a-f0-9]{64}$/),
-  original_pages: z.array(z.number().int().min(1).max(500)).min(1).max(3),
-  reviewed: z.literal(true),
-  report: reportExtractionSchema,
-}).refine(
-  (saved) =>
-    saved.report.figures.every(
-      (figure) => figure.excerptPage <= saved.original_pages.length
-    ),
-  "Invalid source page reference."
-);
+});
 
 const responseSchema = z.object({
   reports: z.array(savedReportSchema).max(10),
+  nextCursor: cursorSchema.nullable(),
 });
 
 type SavedReport = z.infer<typeof savedReportSchema>;
-function csvCell(value: string | number | null | undefined): string {
-  let text = value === null || value === undefined ? "" : String(value);
+type ReportCursor = z.infer<typeof cursorSchema>;
 
-  // Prevent spreadsheet programs from interpreting report text as formulas.
+function csvCell(
+  value: string | number | null | undefined
+): string {
+  let text =
+    value === null || value === undefined ? "" : String(value);
+
   if (/^\s*[=+\-@]/u.test(text) || /^[\t\r\n]/u.test(text)) {
     text = "'" + text;
   }
@@ -86,7 +102,6 @@ function downloadReportCsv(saved: SavedReport) {
     .map((row) => row.map(csvCell).join(","))
     .join("\r\n");
 
-  // UTF-8 BOM helps spreadsheet programs recognize international text.
   const blob = new Blob(["\uFEFF", csv, "\r\n"], {
     type: "text/csv;charset=utf-8",
   });
@@ -133,18 +148,23 @@ export default function SavedReports() {
       <h2>Saved GHG reports</h2>
 
       <p className="muted">
-        Latest 10 reviewed snapshots. These reported figures remain
-        separate from your calculated electricity totals.
+        Reviewed snapshots, newest first. Load older reports below.
+        These figures remain separate from your calculated electricity
+        totals.
       </p>
 
       {error ? (
-        <p className="copilot-error" role="alert">{error}</p>
+        <p className="copilot-error" role="alert">
+          {error}
+        </p>
       ) : checking ? (
         <p className="muted">Checking your session…</p>
       ) : userId ? (
         <ReportsList key={userId} />
       ) : (
-        <p className="info-note">Sign in to view your saved reports.</p>
+        <p className="info-note">
+          Sign in to view your saved reports.
+        </p>
       )}
     </section>
   );
@@ -155,35 +175,46 @@ function ReportsList() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
-  const [refresh, setRefresh] = useState(0);
+  const [nextCursor, setNextCursor] =
+    useState<ReportCursor | null>(null);
 
   const controllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    function refreshReports() {
-      setRefresh((value) => value + 1);
-    }
+  const load = useCallback(
+    async (cursor: ReportCursor | null) => {
+      if (cursor && controllerRef.current) return;
 
-    window.addEventListener("ghg-reports-changed", refreshReports);
+      controllerRef.current?.abort();
 
-    return () => {
-      window.removeEventListener("ghg-reports-changed", refreshReports);
-    };
-  }, []);
+      const controller = new AbortController();
+      controllerRef.current = controller;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    controllerRef.current = controller;
-
-    async function load() {
       setBusy(true);
       setError("");
 
+      if (!cursor) {
+        setReports([]);
+        setNextCursor(null);
+        setLoaded(false);
+      }
+
       try {
-        const response = await fetch("/api/reports", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const params = new URLSearchParams();
+
+        if (cursor) {
+          params.set("before", cursor.createdAt);
+          params.set("beforeId", cursor.id);
+        }
+
+        const query = params.toString();
+
+        const response = await fetch(
+          query ? `/api/reports?${query}` : "/api/reports",
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          }
+        );
 
         const text = await response.text();
         let body: unknown;
@@ -211,17 +242,42 @@ function ReportsList() {
         const parsed = responseSchema.safeParse(body);
 
         if (!parsed.success) {
-          throw new Error("The saved report response could not be validated.");
+          throw new Error(
+            "The saved report response could not be validated."
+          );
         }
 
-        if (controller.signal.aborted) return;
+        if (
+          controller.signal.aborted ||
+          controllerRef.current !== controller
+        ) {
+          return;
+        }
 
-        setReports(parsed.data.reports);
+        const page = parsed.data;
+
+        setReports((current) => {
+          if (!cursor) return page.reports;
+
+          const existingIds = new Set(
+            current.map((report) => report.id)
+          );
+
+          return [
+            ...current,
+            ...page.reports.filter(
+              (report) => !existingIds.has(report.id)
+            ),
+          ];
+        });
+
+        setNextCursor(page.nextCursor);
         setLoaded(true);
       } catch (cause: unknown) {
-        if (!controller.signal.aborted) {
-          setReports([]);
-          setLoaded(false);
+        if (
+          !controller.signal.aborted &&
+          controllerRef.current === controller
+        ) {
           setError(
             cause instanceof Error
               ? cause.message
@@ -237,14 +293,32 @@ function ReportsList() {
           }
         }
       }
+    },
+    []
+  );
+
+  useEffect(() => {
+    function refreshReports() {
+      void load(null);
     }
 
-    void load();
+    window.addEventListener(
+      "ghg-reports-changed",
+      refreshReports
+    );
+
+    void load(null);
 
     return () => {
-      controller.abort();
+      window.removeEventListener(
+        "ghg-reports-changed",
+        refreshReports
+      );
+
+      controllerRef.current?.abort();
+      controllerRef.current = null;
     };
-  }, [refresh]);
+  }, [load]);
 
   return (
     <div>
@@ -252,28 +326,35 @@ function ReportsList() {
         type="button"
         className="secondary-button"
         disabled={busy}
-        onClick={() => setRefresh((value) => value + 1)}
+        onClick={() => void load(null)}
         style={{ margin: "16px 0" }}
       >
         {busy ? "Loading…" : "Refresh saved reports"}
       </button>
 
       {error && (
-        <p className="copilot-error" role="alert">{error}</p>
+        <p className="copilot-error" role="alert">
+          {error}
+        </p>
       )}
 
       <div aria-live="polite" aria-busy={busy}>
         {loaded && !busy && reports.length === 0 && (
           <p className="muted">
-            No saved GHG reports yet. Extract a report, review its figures,
-            and save the reviewed snapshot.
+            No saved GHG reports yet. Extract a report, review its
+            figures, and save the reviewed snapshot.
           </p>
         )}
       </div>
 
       {reports.map((saved) => (
         <details className="extracted-item" key={saved.id}>
-          <summary style={{ cursor: "pointer", overflowWrap: "anywhere" }}>
+          <summary
+            style={{
+              cursor: "pointer",
+              overflowWrap: "anywhere",
+            }}
+          >
             <strong>{saved.original_name}</strong>
             {" · "}
             {saved.report.figures.length} figures
@@ -282,19 +363,21 @@ function ReportsList() {
           <p className="muted">
             Saved: {new Date(saved.created_at).toLocaleString()}
           </p>
-          <button
-  type="button"
-  className="secondary-button"
-  onClick={() => downloadReportCsv(saved)}
-  style={{ marginBottom: 12 }}
->
-  Download CSV
-</button>
 
-<p className="muted">
-  Exports one row per figure, including evidence and page references.
-  Spreadsheet-sensitive text is prefixed with an apostrophe for safety.
-</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => downloadReportCsv(saved)}
+            style={{ marginBottom: 12 }}
+          >
+            Download CSV
+          </button>
+
+          <p className="muted">
+            Exports one row per figure, including evidence and page
+            references. Spreadsheet-sensitive text is prefixed with
+            an apostrophe for safety.
+          </p>
 
           <p>
             Original PDF pages: {saved.original_pages.join(", ")}
@@ -307,7 +390,10 @@ function ReportsList() {
 
           {saved.report.warnings.length > 0 && (
             <div className="alert">
-              <strong>Extraction notes retained with this snapshot</strong>
+              <strong>
+                Extraction notes retained with this snapshot
+              </strong>
+
               <ul>
                 {saved.report.warnings.map((warning, index) => (
                   <li key={index}>{warning}</li>
@@ -318,7 +404,9 @@ function ReportsList() {
 
           {saved.report.figures.map((figure, index) => (
             <article className="extracted-item" key={index}>
-              <h3>{figure.scope}: {figure.label}</h3>
+              <h3>
+                {figure.scope}: {figure.label}
+              </h3>
 
               <p>
                 <strong>
@@ -328,16 +416,32 @@ function ReportsList() {
                 </strong>
               </p>
 
-              <p>Organization: {figure.organization || "Not stated"}</p>
-              <p>Reporting period: {figure.reportingPeriod || "Not stated"}</p>
-              <p>Boundary: {figure.boundary || "Not stated"}</p>
+              <p>
+                Organization: {figure.organization || "Not stated"}
+              </p>
+
+              <p>
+                Reporting period:{" "}
+                {figure.reportingPeriod || "Not stated"}
+              </p>
+
+              <p>
+                Boundary: {figure.boundary || "Not stated"}
+              </p>
+
               <p>Accounting basis: {figure.basis}</p>
+
               <p>
                 Original PDF page:{" "}
                 {saved.original_pages[figure.excerptPage - 1]}
               </p>
 
-              <blockquote style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              <blockquote
+                style={{
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                }}
+              >
                 {figure.evidence}
               </blockquote>
             </article>
@@ -345,26 +449,65 @@ function ReportsList() {
 
           <details>
             <summary>File identification</summary>
-            <p>{saved.original_size_bytes.toLocaleString()} bytes</p>
+
+            <p>
+              {saved.original_size_bytes.toLocaleString()} bytes
+            </p>
+
             <p style={{ overflowWrap: "anywhere" }}>
               Save ID: {saved.id}
             </p>
+
             <p>Original file SHA-256:</p>
-            <code style={{ display: "block", overflowWrap: "anywhere" }}>
+
+            <code
+              style={{
+                display: "block",
+                overflowWrap: "anywhere",
+              }}
+            >
               {saved.original_sha256}
             </code>
+
             <p className="muted">
-              This fingerprint identifies file contents; it does not
-              prove authenticity.
+              This fingerprint identifies file contents; it does
+              not prove authenticity.
             </p>
           </details>
 
           <p className="info-note">
             Do not add overlapping figures or alternative Scope 2
-            accounting bases together. No demo emission factor is applied.
+            accounting bases together. No demo emission factor is
+            applied.
           </p>
         </details>
       ))}
+
+      {loaded && (
+        <p className="muted" role="status">
+          {reports.length} saved report
+          {reports.length === 1 ? "" : "s"} loaded.
+        </p>
+      )}
+
+      {nextCursor && (
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void load(nextCursor)}
+          style={{ marginTop: 12 }}
+        >
+          {busy ? "Loading…" : "Load more reports"}
+        </button>
+      )}
+
+      {loaded &&
+        reports.length > 0 &&
+        !nextCursor &&
+        !busy && (
+          <p className="muted">All saved reports loaded.</p>
+        )}
     </div>
   );
 }
