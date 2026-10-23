@@ -27,6 +27,84 @@ const responseSchema = z.object({
 });
 
 type SavedReport = z.infer<typeof savedReportSchema>;
+function csvCell(value: string | number | null | undefined): string {
+  let text = value === null || value === undefined ? "" : String(value);
+
+  // Prevent spreadsheet programs from interpreting report text as formulas.
+  if (/^\s*[=+\-@]/u.test(text) || /^[\t\r\n]/u.test(text)) {
+    text = "'" + text;
+  }
+
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadReportCsv(saved: SavedReport) {
+  const headers = [
+    "Save ID",
+    "Saved at (UTC)",
+    "Original filename",
+    "Original file SHA-256",
+    "Selected original PDF pages",
+    "Organization",
+    "Reporting period",
+    "Boundary",
+    "Scope",
+    "Accounting basis",
+    "Figure label",
+    "Reported value",
+    "Unit",
+    "Original PDF page",
+    "Evidence quotation",
+    "Extraction warnings",
+    "Review status",
+    "Usage note",
+  ];
+
+  const rows = saved.report.figures.map((figure) => [
+    saved.id,
+    saved.created_at,
+    saved.original_name,
+    saved.original_sha256,
+    saved.original_pages.join(", "),
+    figure.organization,
+    figure.reportingPeriod,
+    figure.boundary,
+    figure.scope,
+    figure.basis,
+    figure.label,
+    figure.reportedValue,
+    figure.unit,
+    saved.original_pages[figure.excerptPage - 1],
+    figure.evidence,
+    saved.report.warnings.join("\n"),
+    "User-reviewed; not independently verified",
+    "Reported figures, not calculated electricity totals. " +
+      "Do not sum overlapping figures or alternative Scope 2 bases.",
+  ]);
+
+  const csv = [headers, ...rows]
+    .map((row) => row.map(csvCell).join(","))
+    .join("\r\n");
+
+  // UTF-8 BOM helps spreadsheet programs recognize international text.
+  const blob = new Blob(["\uFEFF", csv, "\r\n"], {
+    type: "text/csv;charset=utf-8",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `ecoguardian-ghg-report-${saved.id}.csv`;
+  document.body.appendChild(link);
+
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
 
 export default function SavedReports() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -204,6 +282,19 @@ function ReportsList() {
           <p className="muted">
             Saved: {new Date(saved.created_at).toLocaleString()}
           </p>
+          <button
+  type="button"
+  className="secondary-button"
+  onClick={() => downloadReportCsv(saved)}
+  style={{ marginBottom: 12 }}
+>
+  Download CSV
+</button>
+
+<p className="muted">
+  Exports one row per figure, including evidence and page references.
+  Spreadsheet-sensitive text is prefixed with an apostrophe for safety.
+</p>
 
           <p>
             Original PDF pages: {saved.original_pages.join(", ")}
