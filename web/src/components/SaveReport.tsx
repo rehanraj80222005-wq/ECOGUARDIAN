@@ -145,6 +145,20 @@ export default function SaveReport({
             ? body.error
             : "Could not save the report.";
 
+        // These responses confirm that this attempt was rejected without
+        // inserting a snapshot. Allow corrections and require review again.
+        // Keep the same payload and ID for conflicts or uncertain outcomes.
+        if (
+          (response.status === 400 || response.status === 413) &&
+          typeof body === "object" && body !== null &&
+          "error" in body && typeof body.error === "string"
+        ) {
+          payloadRef.current = null;
+          saveId.current = null;
+          setAttempted(false);
+          setReviewed(false);
+        }
+
         throw new Error(message);
       }
 
