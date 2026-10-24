@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { PDFDocument } from "pdf-lib";
 import { z } from "zod";
@@ -8,10 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 import { reportExtractionSchema } from "@/lib/report-extraction";
 import SaveReport from "@/components/SaveReport";
 import SavedReports from "@/components/SavedReports";
+import ReportPageFinder from "@/components/ReportPageFinder";
 
 const responseSchema = z.object({
   report: reportExtractionSchema,
-  originalPages: z.array(z.number().int().positive()).min(1).max(3),
+  originalPages: z
+    .array(z.number().int().min(1).max(500))
+    .min(1)
+    .max(3),
 });
 
 type Result = z.infer<typeof responseSchema>;
@@ -43,8 +47,8 @@ export default function ReportReview() {
       <h2>Review a GHG report</h2>
 
       <p className="muted">
-        Extract reported figures from selected PDF pages. Results are
-        unverified drafts and stay separate from your bill-based totals.
+        Find likely emissions pages, then extract and review reported
+        figures. These remain separate from electricity totals.
       </p>
 
       {error ? (
@@ -55,7 +59,7 @@ export default function ReportReview() {
         <ReportForm key={userId} />
       ) : (
         <p className="info-note">Sign in to review a report.</p>
-            )}
+      )}
 
       <SavedReports />
     </section>
@@ -64,21 +68,30 @@ export default function ReportReview() {
 
 function ReportForm() {
   const [file, setFile] = useState<File | null>(null);
+  const [fileVersion, setFileVersion] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
   const [firstPage, setFirstPage] = useState("1");
   const [lastPage, setLastPage] = useState("1");
+  const [bestPage, setBestPage] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [selectionNote, setSelectionNote] = useState("");
 
   const pending = useRef(false);
   const version = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
 
+  // Stable callback prevents scanning from restarting on ordinary renders.
+  const handleBestPage = useCallback((page: number | null) => {
+    setBestPage(page);
+  }, []);
+
   useEffect(() => {
     return () => {
       version.current += 1;
       controllerRef.current?.abort();
+      controllerRef.current = null;
     };
   }, []);
 
@@ -96,11 +109,23 @@ function ReportForm() {
 
   async function extract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await extractPages(Number(firstPage), Number(lastPage));
+  }
 
+  function extractBestPage() {
+    if (bestPage === null || pending.current) return;
+
+    setFirstPage(String(bestPage));
+    setLastPage(String(bestPage));
+    setSelectionNote(
+      `Selected highest-ranked PDF page ${bestPage}.`
+    );
+
+    void extractPages(bestPage, bestPage);
+  }
+
+  async function extractPages(start: number, end: number) {
     if (!file || pending.current) return;
-
-    const start = Number(firstPage);
-    const end = Number(lastPage);
 
     if (
       !Number.isInteger(start) ||
@@ -150,6 +175,8 @@ function ReportForm() {
         throw new Error(`This PDF has only ${pageCount} pages.`);
       }
 
+      if (currentVersion !== version.current) return;
+
       const originalPages = Array.from(
         { length: end - start + 1 },
         (_, index) => start + index
@@ -173,7 +200,6 @@ function ReportForm() {
 
       if (currentVersion !== version.current) return;
 
-      // Copy to an ArrayBuffer-backed view for browser Blob typing.
       const bytes = new Uint8Array(savedBytes.byteLength);
       bytes.set(savedBytes);
 
@@ -230,10 +256,10 @@ function ReportForm() {
       if (currentVersion === version.current) {
         setResult(parsed.data);
       }
-    } catch (error: unknown) {
+    } catch (cause: unknown) {
       if (currentVersion === version.current) {
         setError(
-          error instanceof Error ? error.message : "Extraction failed."
+          cause instanceof Error ? cause.message : "Extraction failed."
         );
       }
     } finally {
@@ -259,9 +285,16 @@ function ReportForm() {
                 const selected = event.target.files?.[0];
                 event.target.value = "";
 
+                if (pending.current) return;
+
+                version.current += 1;
                 setFile(null);
+                setFileVersion((value) => value + 1);
+                setBestPage(null);
+                setPreviewUrl("");
                 setResult(null);
                 setError("");
+                setSelectionNote("");
                 setFirstPage("1");
                 setLastPage("1");
 
@@ -299,6 +332,15 @@ function ReportForm() {
           </a>
         )}
 
+        {file && (
+          <ReportPageFinder
+            key={fileVersion}
+            file={file}
+            disabled={busy}
+            onBestPage={handleBestPage}
+          />
+        )}
+
         <div className="review-fields" style={{ marginTop: 16 }}>
           <label>
             First PDF page
@@ -313,6 +355,7 @@ function ReportForm() {
               onChange={(event) => {
                 setFirstPage(event.target.value);
                 setResult(null);
+                setSelectionNote("");
               }}
             />
           </label>
@@ -330,30 +373,57 @@ function ReportForm() {
               onChange={(event) => {
                 setLastPage(event.target.value);
                 setResult(null);
+                setSelectionNote("");
               }}
             />
           </label>
         </div>
 
         <p className="info-note">
-          Use PDF page positions, counting the cover as page 1—not printed
-          page labels. Select up to three consecutive pages containing
-          emissions tables and their headings.
+          Manual extraction uses the range above: one to three consecutive
+          PDF pages, counting the cover as page 1. Automatic extraction
+          uses only the highest-ranked suggested page.
         </p>
-        
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            marginTop: 16,
+          }}
+        >
+          <button
+            type="submit"
+            className="button"
+            disabled={!file || busy}
+          >
+            {busy ? "Extracting…" : "Extract with Gemini"}
+          </button>
+
+          <button
+            type="button"
+            className="button"
+            disabled={!file || busy || bestPage === null}
+            onClick={extractBestPage}
+          >
+            Extract highest-ranked page
+            {bestPage !== null ? ` (${bestPage})` : ""}
+          </button>
+        </div>
 
         <p className="muted">
-          Clicking Extract sends a PDF excerpt of the selected pages to
-          Google Gemini and uses API quota. The full report is not uploaded.
+          Either extraction button makes one application AI request.
+          The full report is not uploaded. Page scanning itself uses
+          no AI quota. Review and save each result before starting
+          another extraction.
         </p>
 
-        <button
-          type="submit"
-          className="button extract-button"
-          disabled={!file || busy}
-        >
-          {busy ? "Preparing and extracting…" : "Extract report figures"}
-        </button>
+        {selectionNote && (
+          <p className="info-note" role="status">
+            {selectionNote}
+          </p>
+        )}
       </form>
 
       {error && (
@@ -367,9 +437,8 @@ function ReportForm() {
 
             <p className="info-note">
               Selected original PDF pages: {result.originalPages.join(", ")}.
-              Compare every figure and quotation with the original.
-              Extraction drafts are lost on refresh unless you save a reviewed
-snapshot using the form below.
+              {" "}Compare every figure and quotation with the original.
+              Unsaved drafts are lost on refresh.
             </p>
 
             {result.report.warnings.length > 0 && (
@@ -385,8 +454,8 @@ snapshot using the form below.
 
             {result.report.figures.length === 0 && (
               <p className="muted">
-                No eligible emissions figures were found on these pages.
-                Try the report’s emissions inventory table.
+                No eligible figures were found. Inspect the suggestions
+                and try another page or a manual range.
               </p>
             )}
 
@@ -413,7 +482,12 @@ snapshot using the form below.
                   {" "}Check this reference manually.
                 </p>
 
-                <blockquote style={{ whiteSpace: "pre-wrap" }}>
+                <blockquote
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                  }}
+                >
                   {figure.evidence}
                 </blockquote>
               </article>
@@ -422,16 +496,16 @@ snapshot using the form below.
             <p className="info-note">
               These are reported figures, not EcoGuardian calculations.
               Do not add overlapping periods, subtotals, or alternative
-              Scope 2 accounting bases together. No demonstration emission
-              factor has been applied.
+              Scope 2 accounting bases together.
             </p>
+
             {file && result.report.figures.length > 0 && (
-  <SaveReport
-    file={file}
-    report={result.report}
-    originalPages={result.originalPages}
-  />
-)}
+              <SaveReport
+                file={file}
+                report={result.report}
+                originalPages={result.originalPages}
+              />
+            )}
           </div>
         )}
       </div>
